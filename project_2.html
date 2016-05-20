@@ -237,6 +237,7 @@ div#notebook {
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">htmd</span> <span class="k">import</span> <span class="o">*</span>
 <span class="kn">from</span> <span class="nn">htmd.molecule.util</span> <span class="k">import</span> <span class="n">maxDistance</span><span class="p">,</span> <span class="n">writeVoxels</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">ndimage</span>
 <span class="n">htmd</span><span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="n">viewer</span><span class="o">=</span><span class="s1">&#39;vmd&#39;</span><span class="p">)</span>
 </pre></div>
 
@@ -353,7 +354,7 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>At this point, by maxDistance we can get the maximum distance in angstrom of all the atoms of the molecules from its center. Therefore, as we have all the trajectories in a list, we can create another list where we put all the maximum distances and get the maximum of them:</p>
+<p>At this point, by maxDistance we can get the maximum distance of all the atoms of the molecules from its center in angstroms. Therefore, as we have all the trajectories in a list, we can create another list where we put all the maximum distances and get the maximum of them:</p>
 
 </div>
 </div>
@@ -408,7 +409,7 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="Reposition-of-the-molecule">Reposition of the molecule<a class="anchor-link" href="#Reposition-of-the-molecule">&#182;</a></h3>
+<h3 id="Creating-an-empty-matrix">Creating an empty matrix<a class="anchor-link" href="#Creating-an-empty-matrix">&#182;</a></h3>
 </div>
 </div>
 </div>
@@ -417,7 +418,8 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>We need to move all molecules in order to avoid negative coordinates by a given vector which in that case is the value of the maximum distance to the center (D_max). Molecule.moveBy is used to translate the molecule and center it on [D_max, D_max, D_max]:</p>
+<p>We create a new array of given shape and type filled with zeros. The dimension of this matrix is given by the double value of "D_max" with some extra points. We add some more points to take account waters along the trajectories because we have obtained the "D_max" by the first frame.</p>
+<p>The matrix is used to count the number of water atoms on a 3D regular grid of 1A for each dimension:</p>
 
 </div>
 </div>
@@ -427,8 +429,8 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[7]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">molTraj</span> <span class="ow">in</span> <span class="n">trajectories</span><span class="p">:</span>
-    <span class="n">molTraj</span><span class="o">.</span><span class="n">moveBy</span><span class="p">([</span><span class="n">D_max</span><span class="p">,</span><span class="n">D_max</span><span class="p">,</span><span class="n">D_max</span><span class="p">])</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dim_matrix</span> <span class="o">=</span> <span class="p">(</span><span class="n">D_max</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="mi">10</span>
+<span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">dim_matrix</span><span class="p">,</span> <span class="n">dim_matrix</span><span class="p">,</span> <span class="n">dim_matrix</span><span class="p">))</span>
 </pre></div>
 
 </div>
@@ -450,8 +452,9 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>We create a new array of given shape and type filled with zeros. The dimension of this matrix is given by the double value of D_max with some extra points. We add some more points to take account waters along the trajectories because we have obtained the D_max only by the first frame.</p>
-<p>The matrix is used to count the number of water atoms on a 3D regular grid of 1A for each dimension:</p>
+<p>We need to move all molecules in order to avoid negative coordinates by a given vector which in that case is the value of the maximum distance to the center ("D_max"). Molecule.moveBy is used to translate the molecule and center it on [D_max, D_max, D_max].</p>
+<p>Now, we have to create a water duplicate object in order to simplify the code to measure the average water occupancy p(x,y,z) from the oxigen atom of water molecules on a 3D regular grid of 1A for each dimension. This is done by each trajectory. Molecule.filter is used to select water parts of the molecule and clean/remove all the rest.</p>
+<p>After that, we iterate by trajectories, frames and atoms in order to count the number of water atoms on a 3D regular grid of 1A.</p>
 
 </div>
 </div>
@@ -461,8 +464,17 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[8]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dim_matrix</span> <span class="o">=</span> <span class="p">(</span><span class="n">D_max</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="mi">10</span>
-<span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">dim_matrix</span><span class="p">,</span> <span class="n">dim_matrix</span><span class="p">,</span> <span class="n">dim_matrix</span><span class="p">))</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">molTraj</span> <span class="ow">in</span> <span class="n">trajectories</span><span class="p">:</span>
+    <span class="n">molTraj</span><span class="o">.</span><span class="n">moveBy</span><span class="p">([</span><span class="n">D_max</span><span class="p">,</span><span class="n">D_max</span><span class="p">,</span><span class="n">D_max</span><span class="p">])</span>
+    <span class="n">water</span> <span class="o">=</span> <span class="n">molTraj</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">water</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="s1">&#39;water and name OH2&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">water</span><span class="o">.</span><span class="n">step</span><span class="p">)):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">atom</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">water</span><span class="o">.</span><span class="n">coords</span><span class="p">)):</span>
+                <span class="n">coords</span> <span class="o">=</span> <span class="n">water</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="n">atom</span><span class="p">,</span> <span class="p">:,</span> <span class="n">frame</span><span class="p">]</span>
+                <span class="n">matrix</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]))][</span><span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]))][</span><span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]))]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="k">pass</span>
 </pre></div>
 
 </div>
@@ -475,9 +487,7 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Now, we have to create a water duplicate object in order to simplify the code to measure the average water occupancy p(x,y,z) from the oxigen atom of water molecules on a 3D regular grid of 1A for each dimension. This is done by each trajectory.</p>
-<p>Molecule.filter is used to select water parts of the molecule and clean/remove all the rest.</p>
-<p>Let's iterate by trajectories, frames and atoms in the water object. This loop takes a while:</p>
+<p>We use a Gaussian with sigma = 1.5 to distribute the occupancy of a water oxygen over neighboring grib points having the effect of interpolating between points.</p>
 
 </div>
 </div>
@@ -487,16 +497,7 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[9]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">molTraj</span> <span class="ow">in</span> <span class="n">trajectories</span><span class="p">:</span>
-    <span class="n">water</span> <span class="o">=</span> <span class="n">molTraj</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">water</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="s1">&#39;water and name OH2&#39;</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">water</span><span class="o">.</span><span class="n">step</span><span class="p">)):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">atom</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">water</span><span class="o">.</span><span class="n">coords</span><span class="p">)):</span>
-                <span class="n">coords</span> <span class="o">=</span> <span class="n">water</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="n">atom</span><span class="p">,</span> <span class="p">:,</span> <span class="n">frame</span><span class="p">]</span>
-                <span class="n">matrix</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]))][</span><span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]))][</span><span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]))]</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
-            <span class="k">pass</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">matrix</span> <span class="o">=</span> <span class="n">ndimage</span><span class="o">.</span><span class="n">gaussian_filter</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -532,7 +533,7 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Let's define the constants for calculate the chemical potential:</p>
+<p>Let's define the constants (Boltzmann constant (kB) and Temperature) for calculate the chemical potential:</p>
 
 </div>
 </div>
@@ -542,7 +543,7 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[11]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">kb</span> <span class="o">=</span> <span class="mf">0.001987191</span> <span class="c1"># kcal/mol/K</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">kB</span> <span class="o">=</span> <span class="mf">0.001987191</span> <span class="c1"># kcal/mol/K</span>
 <span class="n">T</span> <span class="o">=</span> <span class="mi">298</span> <span class="c1"># K</span>
 </pre></div>
 
@@ -551,12 +552,22 @@ div#notebook {
 </div>
 
 </div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Calculate the occupancy avoiding np.log(0), that's why we add a lower number close to 0:</p>
+
+</div>
+</div>
+</div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
 <div class="prompt input_prompt">In&nbsp;[12]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">occupancy</span> <span class="o">=</span> <span class="o">-</span> <span class="n">kb</span> <span class="o">*</span> <span class="n">T</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">norm_matrix</span> <span class="o">+</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">20</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">occupancy</span> <span class="o">=</span> <span class="o">-</span> <span class="n">kB</span> <span class="o">*</span> <span class="n">T</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">norm_matrix</span> <span class="o">+</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">20</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -631,7 +642,7 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>It can then visualized on top of the PDB of the molecule as an isosurface on VMD. So, when we open the following command, we have to load data into molecule and browse the 'box.cube' generated.</p>
+<p>It can then visualized on top of the PDB of the molecule as an isosurface on VMD. So, when we open the following command, we have to load data into molecule and browse the 'box.cube' generated. We just need to open one molTraj because all the trajectories have the same 'structure.pdb'.</p>
 <p>We can select the 'Drawing Method' called 'Isosurface' which computes and draws a surface within a volumetric data field, on a 3D surface corresponding to points with a single scalar value.</p>
 
 </div>
@@ -655,11 +666,8 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>The following image shows the 'structure.pdb', the 'Isosurface' 'box.cube' calculated and also the 'VolumeSlice'.</p>
-<ul>
-<li>The 'Isosurface' representation is drawed given a isovalue of 7.5 and step 2.</li>
-<li>The 'VolumeSlice' representation draws a texture mapped two-dimensional slice from a volumetric data set already loaded into VMD</li>
-</ul>
+<p>The following image shows the 'structure.pdb' and the 'Isosurface' 'box.cube' calculated and also the 'VolumeSlice'. The 'Isosurface' representation is drawed given a isovalue of 7.5 and step 2.</p>
+<p>We can see two regions which one of them is around our protein.</p>
 
 </div>
 </div>
